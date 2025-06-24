@@ -2,6 +2,14 @@
 
 A powerful web application for analyzing keyword advertising data using the Qwant API. Built with Streamlit for easy deployment and sharing.
 
+## 🌐 Live Demo
+
+**Try the app now**: [https://keyword-ad-analysis-tool-yechenwill.streamlit.app](https://keyword-ad-analysis-tool-yechenwill.streamlit.app)
+
+## 📁 Repository
+
+**GitHub**: [https://github.com/yechenwill/keyword-ad-analysis-tool](https://github.com/yechenwill/keyword-ad-analysis-tool)
+
 ## ✨ Features
 
 - **📁 File Upload**: Drag & drop JSON files with search terms
