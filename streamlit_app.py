@@ -1,0 +1,412 @@
+import streamlit as st
+import json
+import requests
+import time
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import io
+import base64
+
+# Page configuration
+st.set_page_config(
+    page_title="Keyword Ad Analysis Tool",
+    page_icon="🔍",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .metric-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        border-left: 4px solid #1f77b4;
+    }
+    .progress-container {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 1rem 0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# API endpoint template
+API_URL_TEMPLATE = (
+    'http://prod-ssp-engine-private.ric1.admarketplace.net/isp'
+    '?plid=cjqduwisj4&results-ta=100&qt={}&country-code={}'
+    '&region-code=&form-factor={}&os-family=windows'
+    '&v=2.0&out=json&diag=enabled&ctaid='
+)
+
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0',
+    'Accept': 'application/json'
+}
+
+def create_session():
+    """Create a requests session with connection pooling and retry logic"""
+    session = requests.Session()
+    
+    retry_strategy = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+    )
+    
+    adapter = HTTPAdapter(
+        max_retries=retry_strategy,
+        pool_connections=10,
+        pool_maxsize=10
+    )
+    
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    return session
+
+def fetch_ads(keyword, country_code, form_factor, session):
+    """Fetch ads for a single keyword"""
+    url = API_URL_TEMPLATE.format(keyword, country_code, form_factor)
+    try:
+        response = session.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
+        data = response.json()
+        return data.get('text_ads', [])
+    except Exception as e:
+        st.error(f'Failed for "{keyword}": {e}')
+        return []
+
+def process_keyword_batch(keyword_batch, country_code, form_factor, session, progress_bar, status_text):
+    """Process a batch of keywords concurrently"""
+    results = {}
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_keyword = {
+            executor.submit(fetch_ads, keyword, country_code, form_factor, session): keyword
+            for keyword in keyword_batch
+        }
+        
+        for i, future in enumerate(as_completed(future_to_keyword)):
+            keyword = future_to_keyword[future]
+            try:
+                ads = future.result()
+                results[keyword] = ads
+                status_text.text(f"✅ Completed: {keyword} ({len(ads)} ads)")
+            except Exception as e:
+                st.error(f"Error processing {keyword}: {e}")
+                results[keyword] = []
+            
+            # Update progress
+            progress = (i + 1) / len(keyword_batch)
+            progress_bar.progress(progress)
+            time.sleep(0.1)  # Small delay to be respectful to API
+    
+    return results
+
+def main():
+    # Header
+    st.markdown('<h1 class="main-header">🔍 Keyword Ad Analysis Tool</h1>', unsafe_allow_html=True)
+    
+    # Sidebar configuration
+    st.sidebar.header("⚙️ Configuration")
+    
+    # Performance settings
+    st.sidebar.subheader("Performance Settings")
+    max_workers = st.sidebar.slider("Max Concurrent Requests", 5, 20, 10)
+    request_delay = st.sidebar.slider("Request Delay (seconds)", 0.05, 0.5, 0.1, 0.05)
+    timeout = st.sidebar.slider("Request Timeout (seconds)", 15, 60, 30)
+    
+    # API settings
+    st.sidebar.subheader("API Settings")
+    country_code = st.sidebar.selectbox("Country Code", ["FR", "UK", "US", "DE", "IT", "ES"])
+    form_factor = st.sidebar.selectbox("Form Factor", ["desktop", "mobile", "tablet"])
+    
+    # File upload
+    st.header("📁 Upload JSON File")
+    uploaded_file = st.file_uploader(
+        "Choose a JSON file with search terms",
+        type=['json'],
+        help="Upload a JSON file with the structure: {'country-code': 'FR', 'form-factor': 'desktop', 'search-terms': {...}}"
+    )
+    
+    if uploaded_file is not None:
+        try:
+            # Load and validate JSON
+            input_data = json.load(uploaded_file)
+            
+            # Handle both single object and array
+            if isinstance(input_data, list):
+                data_items = input_data
+            else:
+                data_items = [input_data]
+            
+            # Show file preview
+            st.success(f"✅ File loaded successfully! Found {len(data_items)} data item(s)")
+            
+            # Display configuration summary
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Data Items", len(data_items))
+            with col2:
+                total_keywords = sum(
+                    len([k for k in variations if len(k.strip()) >= 3])
+                    for item in data_items
+                    for variations in item.get('search-terms', {}).values()
+                )
+                st.metric("Total Keywords", total_keywords)
+            with col3:
+                estimated_time = total_keywords * request_delay / max_workers
+                st.metric("Est. Time", f"{estimated_time:.1f}s")
+            
+            # Show data preview
+            with st.expander("📋 Data Preview"):
+                for i, item in enumerate(data_items):
+                    st.write(f"**Data Item {i+1}:**")
+                    st.json(item)
+            
+            # Process button
+            if st.button("🚀 Start Analysis", type="primary"):
+                # Initialize session
+                session = create_session()
+                
+                # Progress tracking
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                summary_rows = []
+                detailed_dict = {}
+                processed_keywords = 0
+                
+                # Count total keywords
+                total_keywords = sum(
+                    len([k for k in variations if len(k.strip()) >= 3])
+                    for item in data_items
+                    for variations in item.get('search-terms', {}).values()
+                )
+                
+                # Process each data item
+                for item_index, input_data in enumerate(data_items):
+                    st.subheader(f"📋 Processing Data Item {item_index + 1}/{len(data_items)}")
+                    
+                    item_country = input_data.get('country-code', country_code)
+                    item_form_factor = input_data.get('form-factor', form_factor)
+                    search_terms = input_data.get('search-terms', {})
+                    
+                    if not search_terms:
+                        st.warning("No search terms found in this item, skipping...")
+                        continue
+                    
+                    # Process each search term
+                    for main_term, keyword_variations in search_terms.items():
+                        st.write(f"🔍 **{main_term}** ({len(keyword_variations)} variations)")
+                        
+                        # Filter valid keywords
+                        valid_keywords = [k.strip() for k in keyword_variations if len(k.strip()) >= 3]
+                        
+                        if not valid_keywords:
+                            st.warning("No valid keywords found, skipping...")
+                            continue
+                        
+                        # Process in batches
+                        batch_size = 20
+                        for i in range(0, len(valid_keywords), batch_size):
+                            batch = valid_keywords[i:i + batch_size]
+                            st.write(f"📦 Processing batch {i//batch_size + 1}/{(len(valid_keywords) + batch_size - 1)//batch_size}")
+                            
+                            # Process batch
+                            batch_results = process_keyword_batch(
+                                batch, item_country, item_form_factor, session, 
+                                progress_bar, status_text
+                            )
+                            
+                            # Process results
+                            for keyword, ads in batch_results.items():
+                                advertiser_names = []
+                                details = []
+                                
+                                for ad in ads:
+                                    name = ad.get('adv_name', '').strip()
+                                    score = ad.get('keywordMatchingResult', {}).get('relevanceScore', '')
+                                    if name:
+                                        advertiser_names.append(name)
+                                        details.append({
+                                            "advertiser_name": name,
+                                            "relevance_score": score
+                                        })
+                                
+                                summary_rows.append({
+                                    "data_item": item_index + 1,
+                                    "main_term": main_term,
+                                    "qt": keyword,
+                                    "advertisers": ",".join(advertiser_names),
+                                    "ad_count": len(ads)
+                                })
+                                
+                                detailed_dict[keyword] = {
+                                    "data_item": item_index + 1,
+                                    "main_term": main_term,
+                                    "details": details
+                                }
+                                
+                                processed_keywords += 1
+                                
+                                # Update overall progress
+                                overall_progress = processed_keywords / total_keywords
+                                progress_bar.progress(overall_progress)
+                                status_text.text(f"📊 Progress: {processed_keywords}/{total_keywords} ({overall_progress*100:.1f}%)")
+                
+                session.close()
+                
+                # Results section
+                st.success("✅ Analysis completed!")
+                
+                # Create DataFrame
+                df = pd.DataFrame(summary_rows)
+                
+                # Display results
+                st.header("📊 Results")
+                
+                # Metrics
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("Total Keywords", len(df))
+                with col2:
+                    st.metric("Keywords with Ads", len(df[df['ad_count'] > 0]))
+                with col3:
+                    st.metric("Total Ads Found", df['ad_count'].sum())
+                with col4:
+                    st.metric("Unique Advertisers", len(set(
+                        advertiser for advertisers in df['advertisers'] 
+                        if advertisers for advertiser in advertisers.split(',')
+                    )))
+                
+                # Results table
+                st.subheader("📋 Results Table")
+                st.dataframe(df, use_container_width=True)
+                
+                # Charts
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Advertiser distribution
+                    if not df.empty:
+                        advertiser_counts = {}
+                        for advertisers in df['advertisers']:
+                            if advertisers:
+                                for advertiser in advertisers.split(','):
+                                    advertiser = advertiser.strip()
+                                    advertiser_counts[advertiser] = advertiser_counts.get(advertiser, 0) + 1
+                        
+                        if advertiser_counts:
+                            advertiser_df = pd.DataFrame(list(advertiser_counts.items()), 
+                                                       columns=['Advertiser', 'Count'])
+                            advertiser_df = advertiser_df.sort_values('Count', ascending=False).head(10)
+                            
+                            fig = px.bar(advertiser_df, x='Advertiser', y='Count', 
+                                        title="Top 10 Advertisers")
+                            st.plotly_chart(fig, use_container_width=True)
+                
+                with col2:
+                    # Ads per keyword distribution
+                    if not df.empty:
+                        fig = px.histogram(df, x='ad_count', nbins=20, 
+                                         title="Distribution of Ads per Keyword")
+                        st.plotly_chart(fig, use_container_width=True)
+                
+                # Export options
+                st.header("💾 Export Results")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # CSV export
+                    csv = df.to_csv(index=False)
+                    st.download_button(
+                        label="📄 Download CSV",
+                        data=csv,
+                        file_name="keyword_analysis_results.csv",
+                        mime="text/csv"
+                    )
+                
+                with col2:
+                    # JSON export
+                    json_str = json.dumps(detailed_dict, ensure_ascii=False, indent=2)
+                    st.download_button(
+                        label="📄 Download JSON",
+                        data=json_str,
+                        file_name="keyword_analysis_detailed.json",
+                        mime="application/json"
+                    )
+                
+                with col3:
+                    # Excel export
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        df.to_excel(writer, sheet_name='Summary', index=False)
+                        
+                        # Create detailed sheet
+                        detailed_rows = []
+                        for keyword, data in detailed_dict.items():
+                            for detail in data['details']:
+                                detailed_rows.append({
+                                    'keyword': keyword,
+                                    'main_term': data['main_term'],
+                                    'data_item': data['data_item'],
+                                    'advertiser': detail['advertiser_name'],
+                                    'relevance_score': detail['relevance_score']
+                                })
+                        
+                        if detailed_rows:
+                            detailed_df = pd.DataFrame(detailed_rows)
+                            detailed_df.to_excel(writer, sheet_name='Detailed', index=False)
+                    
+                    excel_data = output.getvalue()
+                    st.download_button(
+                        label="📄 Download Excel",
+                        data=excel_data,
+                        file_name="keyword_analysis_results.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
+                
+        except json.JSONDecodeError as e:
+            st.error(f"❌ Invalid JSON file: {e}")
+        except Exception as e:
+            st.error(f"❌ Error processing file: {e}")
+    
+    # Instructions
+    with st.sidebar:
+        st.header("📖 Instructions")
+        st.markdown("""
+        1. **Upload JSON file** with search terms
+        2. **Configure settings** in sidebar
+        3. **Click Start Analysis** to begin
+        4. **View results** and download exports
+        
+        **JSON Format:**
+        ```json
+        {
+          "country-code": "FR",
+          "form-factor": "desktop", 
+          "search-terms": {
+            "main term": ["keyword1", "keyword2"]
+          }
+        }
+        ```
+        """)
+
+if __name__ == "__main__":
+    main() 
