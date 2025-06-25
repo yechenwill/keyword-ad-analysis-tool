@@ -86,16 +86,16 @@ def check_vpn_connectivity():
         host = "prod-ssp-engine-private.ric1.admarketplace.net"
         port = 80
         
-        # Try to connect to the server
+        # Try to connect to the server with longer timeout for Streamlit
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(5)
+        sock.settimeout(10)  # Increased timeout for Streamlit environment
         result = sock.connect_ex((host, port))
         sock.close()
         
         if result == 0:
             return True, "✅ VPN connection appears to be working"
         else:
-            return False, "❌ Cannot reach the API server - VPN connection may be required"
+            return False, f"❌ Cannot reach the API server (error code: {result}) - VPN connection may be required"
             
     except Exception as e:
         return False, f"❌ Connection test failed: {str(e)}"
@@ -103,21 +103,44 @@ def check_vpn_connectivity():
 def test_api_endpoint():
     """Test the actual API endpoint to verify it's accessible"""
     try:
-        # Use a simple test query
+        # Use a simple test query with longer timeout
         test_url = API_URL_TEMPLATE.format("test", "US", "desktop")
-        response = requests.get(test_url, headers=HEADERS, timeout=10)
+        
+        # Create a session for the request
+        session = requests.Session()
+        
+        response = session.get(test_url, headers=HEADERS, timeout=15)
         
         if response.status_code == 200:
             return True, "✅ API endpoint is accessible"
         else:
             return False, f"❌ API returned status code: {response.status_code}"
             
-    except requests.exceptions.ConnectionError:
-        return False, "❌ Connection failed - Please check your VPN connection"
+    except requests.exceptions.ConnectionError as e:
+        return False, f"❌ Connection failed - Please check your VPN connection (Error: {str(e)})"
     except requests.exceptions.Timeout:
         return False, "❌ Request timeout - Please check your VPN connection"
     except Exception as e:
         return False, f"❌ API test failed: {str(e)}"
+
+def check_vpn_with_retry(max_retries=3):
+    """Check VPN connectivity with retry logic"""
+    for attempt in range(max_retries):
+        try:
+            vpn_status, vpn_message = check_vpn_connectivity()
+            if vpn_status:
+                return vpn_status, vpn_message
+            
+            # If failed, wait a bit and retry
+            if attempt < max_retries - 1:
+                time.sleep(2)
+                
+        except Exception as e:
+            if attempt == max_retries - 1:
+                return False, f"❌ VPN check failed after {max_retries} attempts: {str(e)}"
+            time.sleep(2)
+    
+    return False, "❌ VPN connection check failed after multiple attempts"
 
 def create_session():
     """Create a requests session with connection pooling and retry logic"""
@@ -192,8 +215,17 @@ def main():
     # VPN Connectivity Check
     st.subheader("🔒 VPN Connection Status")
     
+    # Add manual refresh button
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.write("Click the button to manually check VPN status:")
+    with col2:
+        if st.button("🔄 Refresh VPN Status", type="secondary"):
+            st.rerun()
+    
     # Check VPN connectivity
-    vpn_status, vpn_message = check_vpn_connectivity()
+    with st.spinner("Checking VPN connection..."):
+        vpn_status, vpn_message = check_vpn_with_retry()
     
     if vpn_status:
         st.markdown(f"""
@@ -204,7 +236,9 @@ def main():
         """, unsafe_allow_html=True)
         
         # Test API endpoint
-        api_status, api_message = test_api_endpoint()
+        with st.spinner("Testing API endpoint..."):
+            api_status, api_message = test_api_endpoint()
+        
         if api_status:
             st.markdown(f"""
             <div class="vpn-success">
@@ -228,11 +262,37 @@ def main():
         <p><strong>Before using this tool, please ensure you are connected to your company VPN.</strong></p>
         <ol>
             <li>Connect to your company VPN</li>
-            <li>Refresh this page</li>
+            <li>Click "Refresh VPN Status" above</li>
             <li>Try the analysis again</li>
         </ol>
         </div>
         """, unsafe_allow_html=True)
+        
+        # Add troubleshooting section
+        with st.expander("🔧 VPN Troubleshooting"):
+            st.markdown("""
+            **If you're connected to VPN but still see this error:**
+            
+            1. **Run the test script** in terminal:
+               ```bash
+               python3 test_vpn_connection.py
+               ```
+            
+            2. **Check VPN split tunneling** - ensure all traffic goes through VPN
+            
+            3. **Try manual connectivity test**:
+               ```bash
+               ping prod-ssp-engine-private.ric1.admarketplace.net
+               ```
+            
+            4. **Contact IT** if the test script works but app doesn't
+            
+            **Common issues:**
+            - VPN client needs restart
+            - Firewall blocking connection
+            - DNS resolution issues
+            - VPN session expired
+            """)
     
     # VPN Information Section
     st.markdown("""
