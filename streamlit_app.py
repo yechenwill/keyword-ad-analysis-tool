@@ -145,7 +145,6 @@ def main():
         <li>Refresh this page</li>
         <li>Try the analysis again</li>
     </ol>
-    <p><strong>API Server:</strong> <code>prod-ssp-engine-private.ric1.admarketplace.net</code></p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -438,7 +437,6 @@ def main():
         
         **VPN Requirements:**
         - Must be connected to company VPN
-        - Access to `prod-ssp-engine-private.ric1.admarketplace.net`
         - Contact IT if you need VPN credentials
         """)
 
