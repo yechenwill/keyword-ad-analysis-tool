@@ -1,6 +1,6 @@
 # 🔍 Keyword Ad Analysis Tool
 
-A powerful web application for analyzing keyword advertising data using the Qwant API. Built with Streamlit for easy deployment and sharing.
+A powerful web application for analyzing keyword advertising data using the Qwant API. Built with Streamlit for easy deployment and sharing. This tool requires VPN access to connect to private company networks.
 
 ## 🌐 Live Demo
 
@@ -27,147 +27,204 @@ A powerful web application for analyzing keyword advertising data using the Qwan
 - **Keyword Research**: Discover keyword variations and their advertising potential
 - **Market Analysis**: Track advertising trends across different markets
 
+## 🔒 VPN Requirements
+
+**IMPORTANT**: This tool requires a VPN connection to access the private API server. Before using the tool, ensure you are connected to your company VPN.
+
+### VPN Connection Steps
+
+1. **Connect to Company VPN**
+   - Use your company's VPN client
+   - Enter your VPN credentials if required
+   - Ensure the connection is established
+
+2. **Verify VPN Connection**
+   - Run the VPN test script: `python test_vpn_connection.py`
+   - Check that all tests pass before using the main app
+
+3. **Troubleshooting VPN Issues**
+   - Contact your IT department for VPN credentials
+   - Ensure your VPN client is up to date
+   - Try disconnecting and reconnecting to VPN
+   - Check if your VPN allows access to internal APIs
+
 ## 🚀 Quick Start
 
-### Option 1: Use the Web App (Recommended)
-1. Visit the deployed app: [Your Streamlit Cloud URL]
-2. Upload your JSON file
-3. Configure settings
-4. Start analysis
-5. Download results
+### Prerequisites
 
-### Option 2: Run Locally
+- Python 3.8 or higher
+- Company VPN access
+- VPN credentials (if required)
 
-```bash
-# Clone the repository
-git clone https://github.com/yourusername/keyword-ad-analysis-tool.git
-cd keyword-ad-analysis-tool
+### Installation
 
-# Install dependencies
-pip install -r requirements.txt
+1. **Clone or download the repository**
+   ```bash
+   git clone <repository-url>
+   cd keyword-ad-analysis-tool
+   ```
 
-# Run the app
-streamlit run streamlit_app.py
-```
+2. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-## 📁 Input Format
+3. **Test VPN connection**
+   ```bash
+   python test_vpn_connection.py
+   ```
 
-Your JSON file should follow this structure:
+4. **Run the application**
+   ```bash
+   streamlit run streamlit_app.py
+   ```
+
+## 📋 Usage
+
+### 1. VPN Connection Check
+
+The app automatically checks your VPN connection status when it loads. You'll see:
+- ✅ **Green status**: VPN is working correctly
+- ❌ **Red status**: VPN connection issues detected
+
+### 2. Prepare Your Data
+
+Create a JSON file with your search terms in this format:
 
 ```json
 {
   "country-code": "FR",
   "form-factor": "desktop",
   "search-terms": {
-    "main search term": [
-      "keyword variation 1",
-      "keyword variation 2",
-      "keyword variation 3"
+    "laptops": [
+      "gaming laptop",
+      "business laptop",
+      "student laptop",
+      "cheap laptop"
     ],
-    "another search term": [
-      "more variations"
+    "phones": [
+      "smartphone",
+      "mobile phone",
+      "iphone",
+      "android phone"
     ]
   }
 }
 ```
 
-### Example:
-```json
-{
-  "country-code": "FR",
-  "form-factor": "desktop",
-  "search-terms": {
-    "chaussures tendance pour 2025": [
-      "chaussures t",
-      "chaussures te",
-      "chaussures ten",
-      "chaussures tendance",
-      "chaussures tendance pour 2025"
-    ]
-  }
-}
-```
+### 3. Run Analysis
 
-## ⚙️ Configuration
+1. Upload your JSON file
+2. Configure settings in the sidebar
+3. Click "Start Analysis"
+4. View results and download exports
+
+## 🔧 Configuration
 
 ### Performance Settings
-- **Max Concurrent Requests**: 5-20 (default: 10)
-- **Request Delay**: 0.05-0.5 seconds (default: 0.1)
-- **Request Timeout**: 15-60 seconds (default: 30)
+
+- **Max Concurrent Requests**: Number of simultaneous API calls (5-20)
+- **Request Delay**: Delay between requests to avoid rate limiting (0.05-0.5s)
+- **Request Timeout**: Maximum time to wait for API responses (15-60s)
 
 ### API Settings
-- **Country Code**: FR, UK, US, DE, IT, ES
-- **Form Factor**: desktop, mobile, tablet
+
+- **Country Code**: Target country for analysis (FR, UK, US, DE, IT, ES)
+- **Form Factor**: Device type (desktop, mobile, tablet)
 
 ## 📊 Output
 
-### Summary CSV
-- `data_item`: Which configuration item
-- `main_term`: Original search term
-- `qt`: Keyword variation
-- `advertisers`: Comma-separated advertiser names
-- `ad_count`: Number of ads found
+The tool provides:
 
-### Detailed JSON
-- Complete advertiser information
-- Relevance scores
-- Structured data for further analysis
+- **Summary Table**: Overview of keywords and advertisers
+- **Charts**: Visualizations of advertiser distribution and ad counts
+- **Export Options**: CSV, JSON, and Excel downloads
+- **Detailed Results**: Comprehensive data for further analysis
 
-### Excel Export
-- **Summary Sheet**: Overview of all results
-- **Detailed Sheet**: Individual advertiser data with scores
+## 🛠️ Troubleshooting
 
-## 🛠️ Technical Details
+### VPN Connection Issues
 
-- **Backend**: Python with Streamlit
-- **HTTP Client**: Requests with connection pooling
-- **Concurrency**: ThreadPoolExecutor for parallel processing
-- **Visualization**: Plotly for interactive charts
-- **Data Processing**: Pandas for data manipulation
+**Problem**: "Cannot reach the API server" error
+**Solution**:
+1. Ensure you're connected to company VPN
+2. Run `python test_vpn_connection.py` to diagnose
+3. Contact IT if VPN credentials are needed
+4. Try refreshing the page after connecting to VPN
 
-## 🔧 Development
+**Problem**: "Connection failed" errors during analysis
+**Solution**:
+1. Check VPN connection is still active
+2. Reduce concurrent requests in settings
+3. Increase request timeout
+4. Try again with fewer keywords
 
-### Project Structure
+### API Issues
+
+**Problem**: "API returned status code: 403/401"
+**Solution**:
+1. Verify VPN connection
+2. Check if API access is granted to your account
+3. Contact system administrator
+
+**Problem**: "Request timeout" errors
+**Solution**:
+1. Check VPN connection stability
+2. Increase timeout setting
+3. Reduce concurrent requests
+4. Try during off-peak hours
+
+### Performance Issues
+
+**Problem**: Analysis is very slow
+**Solution**:
+1. Increase concurrent requests (if VPN allows)
+2. Reduce request delay
+3. Process fewer keywords at once
+4. Check VPN connection speed
+
+## 📁 File Structure
+
 ```
 keyword-ad-analysis-tool/
-├── streamlit_app.py      # Main application
-├── requirements.txt      # Python dependencies
-├── README.md            # This file
-├── input_search_terms.json  # Example input file
-└── .gitignore           # Git ignore file
+├── streamlit_app.py          # Main application
+├── test_vpn_connection.py    # VPN connectivity test
+├── requirements.txt          # Python dependencies
+├── README.md                # This file
+└── LICENSE                  # License information
 ```
 
-### Adding Features
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test locally
-5. Submit a pull request
+## 🔍 VPN Test Script
 
-## 🌐 Deployment
+The `test_vpn_connection.py` script performs three tests:
 
-### Streamlit Cloud (Recommended)
-1. Push code to GitHub
-2. Go to [share.streamlit.io](https://share.streamlit.io)
-3. Connect your GitHub repository
-4. Deploy with one click
+1. **Basic Connectivity**: Tests if the API server is reachable
+2. **API Endpoint**: Tests if the API responds correctly
+3. **Sample Query**: Tests if the API returns expected data
 
-### Other Platforms
-- **Heroku**: Use the Procfile and requirements.txt
-- **Railway**: Direct GitHub integration
-- **DigitalOcean**: App Platform deployment
+Run it before using the main app:
+```bash
+python test_vpn_connection.py
+```
 
-## 🤝 Contributing
+## 📞 Support
 
-1. Fork the project
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+If you encounter issues:
 
-## 📝 License
+1. **VPN Issues**: Contact your IT department
+2. **API Issues**: Contact the system administrator
+3. **Tool Issues**: Check this README and troubleshoot
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+## 🔐 Security Notes
+
+- This tool accesses internal APIs - keep VPN credentials secure
+- Don't share VPN credentials or API access
+- Follow company security policies
+- Log out of VPN when not in use
+
+## 📄 License
+
+[Add your license information here]
 
 ## 🆘 Support
 
