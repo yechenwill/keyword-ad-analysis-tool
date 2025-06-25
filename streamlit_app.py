@@ -41,6 +41,13 @@ st.markdown("""
         border-radius: 0.5rem;
         margin: 1rem 0;
     }
+    .vpn-info {
+        background-color: #e3f2fd;
+        border: 1px solid #2196f3;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -86,6 +93,12 @@ def fetch_ads(keyword, country_code, form_factor, session):
         response.raise_for_status()
         data = response.json()
         return data.get('text_ads', [])
+    except requests.exceptions.ConnectionError:
+        st.error(f'❌ Connection failed for "{keyword}" - Please ensure you are connected to the required VPN')
+        return []
+    except requests.exceptions.Timeout:
+        st.error(f'⏰ Request timeout for "{keyword}" - Please check your VPN connection')
+        return []
     except Exception as e:
         st.error(f'Failed for "{keyword}": {e}')
         return []
@@ -120,6 +133,21 @@ def process_keyword_batch(keyword_batch, country_code, form_factor, session, pro
 def main():
     # Header
     st.markdown('<h1 class="main-header">🔍 Keyword Ad Analysis Tool</h1>', unsafe_allow_html=True)
+    
+    # VPN Information Section
+    st.markdown("""
+    <div class="vpn-info">
+    <h4>🔒 VPN Connection Required</h4>
+    <p><strong>Before using this tool, please ensure you are connected to your company VPN.</strong></p>
+    <p>This tool accesses a private API server that requires VPN access. If you encounter connection errors, please:</p>
+    <ol>
+        <li>Connect to your company VPN</li>
+        <li>Refresh this page</li>
+        <li>Try the analysis again</li>
+    </ol>
+    <p><strong>API Server:</strong> <code>prod-ssp-engine-private.ric1.admarketplace.net</code></p>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Sidebar configuration
     st.sidebar.header("⚙️ Configuration")
@@ -391,10 +419,11 @@ def main():
     with st.sidebar:
         st.header("📖 Instructions")
         st.markdown("""
-        1. **Upload JSON file** with search terms
-        2. **Configure settings** in sidebar
-        3. **Click Start Analysis** to begin
-        4. **View results** and download exports
+        1. **Connect to VPN** - Ensure you're connected to your company VPN
+        2. **Upload JSON file** with search terms
+        3. **Configure settings** in sidebar
+        4. **Click Start Analysis** to begin
+        5. **View results** and download exports
         
         **JSON Format:**
         ```json
@@ -406,6 +435,11 @@ def main():
           }
         }
         ```
+        
+        **VPN Requirements:**
+        - Must be connected to company VPN
+        - Access to `prod-ssp-engine-private.ric1.admarketplace.net`
+        - Contact IT if you need VPN credentials
         """)
 
 if __name__ == "__main__":
