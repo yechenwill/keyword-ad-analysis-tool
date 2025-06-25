@@ -12,6 +12,13 @@ import io
 import base64
 import socket
 
+# Import VPN manager
+try:
+    from vpn_manager import create_vpn_manager
+    VPN_MANAGER_AVAILABLE = True
+except ImportError:
+    VPN_MANAGER_AVAILABLE = False
+
 # Page configuration
 st.set_page_config(
     page_title="Keyword Ad Analysis Tool",
@@ -59,6 +66,13 @@ st.markdown("""
     .vpn-success {
         background-color: #e8f5e8;
         border: 1px solid #4caf50;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    .vpn-manager {
+        background-color: #fff3e0;
+        border: 1px solid #ff9800;
         border-radius: 0.5rem;
         padding: 1rem;
         margin: 1rem 0;
@@ -211,6 +225,140 @@ def process_keyword_batch(keyword_batch, country_code, form_factor, session, pro
 def main():
     # Header
     st.markdown('<h1 class="main-header">🔍 Keyword Ad Analysis Tool</h1>', unsafe_allow_html=True)
+    
+    # VPN Manager Section
+    if VPN_MANAGER_AVAILABLE:
+        st.subheader("🔧 VPN Connection Manager")
+        
+        # Initialize VPN manager
+        vpn_manager = create_vpn_manager()
+        
+        # Get system info
+        system_info = vpn_manager.get_system_info()
+        
+        # Display system info
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("System", system_info['system'].title())
+        with col2:
+            st.metric("Platform", system_info['platform'].split('-')[0])
+        with col3:
+            st.metric("Architecture", system_info['architecture'])
+        
+        # VPN Management Tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["🔗 VPN Connections", "🌐 Network Info", "🔍 Connectivity Test", "📋 Status"])
+        
+        with tab1:
+            st.markdown("""
+            <div class="vpn-manager">
+            <h4>🔗 VPN Connection Management</h4>
+            <p>Manage your VPN connections directly from this app.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # List VPN connections
+            with st.spinner("Scanning for VPN connections..."):
+                vpn_connections = vpn_manager.list_vpn_connections()
+            
+            if vpn_connections:
+                st.write(f"Found {len(vpn_connections)} VPN connection(s):")
+                
+                for i, conn in enumerate(vpn_connections):
+                    with st.expander(f"🔗 {conn['name']} ({conn['status']})"):
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            if conn['status'] == 'Connected':
+                                st.success(f"✅ Connected to {conn['name']}")
+                                if st.button(f"🔌 Disconnect {conn['name']}", key=f"disconnect_{i}"):
+                                    with st.spinner(f"Disconnecting from {conn['name']}..."):
+                                        success, message = vpn_manager.disconnect_vpn(conn['name'])
+                                        if success:
+                                            st.success(message)
+                                            st.rerun()
+                                        else:
+                                            st.error(message)
+                            else:
+                                st.warning(f"❌ Not connected to {conn['name']}")
+                                if st.button(f"🔌 Connect {conn['name']}", key=f"connect_{i}"):
+                                    with st.spinner(f"Connecting to {conn['name']}..."):
+                                        success, message = vpn_manager.connect_vpn(conn['name'])
+                                        if success:
+                                            st.success(message)
+                                            st.rerun()
+                                        else:
+                                            st.error(message)
+                        
+                        with col2:
+                            # Get detailed status
+                            status, status_msg = vpn_manager.get_vpn_status(conn['name'])
+                            st.write(f"**Status:** {status_msg}")
+            else:
+                st.warning("No VPN connections found. Please configure VPN connections in your system settings.")
+        
+        with tab2:
+            st.markdown("""
+            <div class="vpn-manager">
+            <h4>🌐 Network Information</h4>
+            <p>View your current network configuration.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            with st.spinner("Gathering network information..."):
+                network_info = vpn_manager.get_network_info()
+            
+            # Display network interfaces
+            st.subheader("Network Interfaces")
+            if network_info['interfaces']:
+                for interface in network_info['interfaces']:
+                    st.write(f"**{interface['name']}:** {interface['ip']}")
+            else:
+                st.warning("No network interfaces found.")
+            
+            # Display default gateway
+            if network_info['default_gateway']:
+                st.subheader("Default Gateway")
+                st.write(network_info['default_gateway'])
+        
+        with tab3:
+            st.markdown("""
+            <div class="vpn-manager">
+            <h4>🔍 Internal Connectivity Test</h4>
+            <p>Test connectivity to internal company resources.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            if st.button("🔍 Run Connectivity Tests"):
+                with st.spinner("Testing connectivity..."):
+                    connectivity_tests = vpn_manager.test_internal_connectivity()
+                
+                for test_name, test_result in connectivity_tests.items():
+                    if test_result['status']:
+                        st.success(f"✅ {test_name}: Connected")
+                    else:
+                        st.error(f"❌ {test_name}: {test_result['error']}")
+        
+        with tab4:
+            st.markdown("""
+            <div class="vpn-manager">
+            <h4>📋 System Status</h4>
+            <p>Current system and VPN status information.</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Display system status
+            st.subheader("System Information")
+            st.json(system_info)
+            
+            # Display VPN connections status
+            st.subheader("VPN Connections Status")
+            vpn_connections = vpn_manager.list_vpn_connections()
+            if vpn_connections:
+                for conn in vpn_connections:
+                    status_icon = "✅" if conn['status'] == 'Connected' else "❌"
+                    st.write(f"{status_icon} {conn['name']}: {conn['status']}")
+            else:
+                st.warning("No VPN connections configured.")
     
     # VPN Connectivity Check
     st.subheader("🔒 VPN Connection Status")
